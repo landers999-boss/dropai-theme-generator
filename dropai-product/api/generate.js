@@ -82,7 +82,7 @@ Make the theme feel authentic and premium for the ${niche} market. Choose fonts 
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-5",
         max_tokens: 8000,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: userPrompt }],
@@ -90,9 +90,11 @@ Make the theme feel authentic and premium for the ${niche} market. Choose fonts 
     });
 
     if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || "Anthropic API error");
-    }
+  const errText = await response.text();
+  throw new Error("Anthropic said: " + errText);
+}
+
+}
 
     const data = await response.json();
     const rawText = data.content.map((b) => b.text || "").join("");
