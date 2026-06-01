@@ -9,33 +9,31 @@ export default async function handler(req, res) {
 
   const name = storeName || niche + " Store";
 
-  const prompt = `You are a Shopify theme developer. Create a high-quality, production-ready Shopify theme for a ${niche} store called "${name}"${tagline ? ` with tagline "${tagline}"` : ""}.
+  const prompt = `You are a Shopify theme developer. Create a production-ready Shopify theme for a ${niche} store called "${name}"${tagline ? ` with tagline "${tagline}"` : ""}.
 
-CRITICAL: Return ONLY a raw JSON object. No markdown, no backticks, no explanation before or after. The response must start with { and end with }.
-
-All file content must be on a single line — use \\n for line breaks, \\" for quotes inside strings. Do not use actual newlines inside JSON string values.
+Return a JSON object with this exact structure. IMPORTANT: all file contents must use \\n for newlines (escaped), not real newlines. The entire response must be valid JSON that can be parsed with JSON.parse().
 
 {
   "files": {
-    "layout/theme.liquid": "full HTML layout with {{ content_for_header }}, {{ content_for_layout }}, nav, footer",
-    "templates/index.liquid": "homepage with hero, featured products, value props",
-    "templates/product.liquid": "product page with image, title, price, add to cart",
-    "templates/collection.liquid": "collection grid with product cards",
-    "templates/cart.liquid": "cart page with line items and checkout button",
-    "sections/header.liquid": "sticky nav with logo, menu, cart icon + {% schema %}",
-    "sections/hero.liquid": "hero banner with headline, subtext, CTA button + {% schema %}",
-    "assets/theme.css": "complete CSS: reset, typography, layout, components, responsive",
-    "config/settings_schema.json": "theme editor settings array with typography and color sections",
-    "locales/en.default.json": "strings object with general, products, cart keys"
+    "layout/theme.liquid": "...",
+    "templates/index.liquid": "...",
+    "templates/product.liquid": "...",
+    "templates/collection.liquid": "...",
+    "templates/cart.liquid": "...",
+    "sections/header.liquid": "...",
+    "sections/hero.liquid": "...",
+    "assets/theme.css": "...",
+    "config/settings_schema.json": "...",
+    "locales/en.default.json": "..."
   },
   "meta": {
-    "themeName": "${name} Theme",
-    "tagline": "compelling tagline for ${niche}",
-    "colorAccent": "#hexcode matching ${niche} aesthetic"
+    "themeName": "...",
+    "tagline": "...",
+    "colorAccent": "#hexcode"
   }
 }
 
-Make it genuinely good — real Liquid syntax, proper Shopify objects (product.title, product.price | money, cart.item_count), niche-appropriate colors and copy, mobile-responsive CSS. Each file should be complete and functional.`;
+Make it genuinely good — real Liquid syntax, proper Shopify objects (product.title, product.price | money, cart.item_count), niche-appropriate colors and copy for ${niche}, mobile-responsive CSS. Each file should be complete and functional. Remember: escape all newlines as \\n inside string values.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -59,8 +57,62 @@ Make it genuinely good — real Liquid syntax, proper Shopify objects (product.t
     }
 
     const data = await response.json();
-    console.log("Anthropic response received");
-    return res.status(200).json({ success: true, content: data.content });
+    const aiText = data.content?.[0]?.text || "";
+
+    // Strip markdown fences if present
+    const clean = aiText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+
+    // Fix unescaped newlines inside JSON strings
+    // Replace real newlines that appear inside string values with \n
+    let fixed = "";
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < clean.length; i++) {
+      const ch = clean[i];
+      if (escaped) {
+        fixed += ch;
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        fixed += ch;
+        escaped = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = !inString;
+        fixed += ch;
+        continue;
+      }
+      if (inString && ch === "\n") {
+        fixed += "\\n";
+        continue;
+      }
+      if (inString && ch === "\r") {
+        continue; // strip carriage returns
+      }
+      if (inString && ch === "\t") {
+        fixed += "\\t";
+        continue;
+      }
+      fixed += ch;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(fixed);
+    } catch (e) {
+      console.error("JSON parse error:", e.message);
+      console.error("Raw AI text (first 500):", clean.substring(0, 500));
+      return res.status(500).json({ error: "AI returned invalid JSON: " + e.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      files: parsed.files || {},
+      meta: parsed.meta || {},
+    });
+
   } catch (err) {
     console.error("Caught error:", err.message);
     return res.status(500).json({ error: err.message });
