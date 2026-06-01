@@ -19,19 +19,14 @@ const NICHES = [
 const GEN_STEPS = ["Verifying purchase", "Configuring AI", "Building theme", "Packaging files"];
 
 export default function Generator({ sessionId }) {
-  // Phases: verify | configure | generating | done | error
   const [phase, setPhase] = useState("verify");
   const [token, setToken] = useState(null);
   const [prefillMeta, setPrefillMeta] = useState({});
   const [customerEmail, setCustomerEmail] = useState("");
-
-  // Configure form
   const [selectedNiche, setSelectedNiche] = useState("");
   const [customNiche, setCustomNiche] = useState("");
   const [storeName, setStoreName] = useState("");
   const [tagline, setTagline] = useState("");
-
-  // Generation state
   const [genStep, setGenStep] = useState(0);
   const [log, setLog] = useState([]);
   const [result, setResult] = useState(null);
@@ -44,7 +39,6 @@ export default function Generator({ sessionId }) {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [log]);
 
-  // Step 1: verify the Stripe session and get a signed token
   useEffect(() => {
     if (!sessionId) { setError("No session ID found."); setPhase("error"); return; }
     verifyPurchase();
@@ -109,18 +103,14 @@ export default function Generator({ sessionId }) {
         body: JSON.stringify({ niche: activeNiche, storeName, tagline }),
       });
 
-      // ✅ Safe parse — handles empty or non-JSON responses
       const text = await res.text();
       if (!text) throw new Error("Empty response from server");
       const data = JSON.parse(text);
       if (!res.ok) throw new Error(data.error || "Generation failed");
 
-      // ✅ Parse AI content into files/meta
-      const aiText = data.content?.[0]?.text || "";
-      const clean = aiText.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      const files = parsed.files || {};
-      const meta = parsed.meta || {};
+      // ✅ API now returns files and meta directly
+      const files = data.files || {};
+      const meta = data.meta || {};
 
       addLog(`✅ Theme generated — ${Object.keys(files).length} files`);
       setGenStep(3);
@@ -161,12 +151,10 @@ export default function Generator({ sessionId }) {
 
   function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-  // ── RENDER ──────────────────────────────────────────────────────────────
   return (
     <div style={styles.root}>
       <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
 
-      {/* NAV */}
       <nav style={styles.nav}>
         <div style={styles.logo}>Drop<span style={{ color: "#00C896" }}>AI</span></div>
         {customerEmail && (
@@ -177,7 +165,6 @@ export default function Generator({ sessionId }) {
         )}
       </nav>
 
-      {/* ── PHASE: VERIFY ── */}
       {phase === "verify" && (
         <CenteredBox>
           <Spinner />
@@ -186,7 +173,6 @@ export default function Generator({ sessionId }) {
         </CenteredBox>
       )}
 
-      {/* ── PHASE: CONFIGURE ── */}
       {phase === "configure" && (
         <div style={{ maxWidth: 780, margin: "0 auto", padding: "3rem 2rem" }}>
           <div style={{ marginBottom: "2.5rem" }}>
@@ -223,11 +209,7 @@ export default function Generator({ sessionId }) {
           {selectedNiche === "custom" && (
             <div style={{ marginBottom: "1.25rem" }}>
               <Label>Describe your niche</Label>
-              <Input
-                value={customNiche}
-                onChange={(e) => setCustomNiche(e.target.value)}
-                placeholder="e.g. Sustainable bamboo kitchenware"
-              />
+              <Input value={customNiche} onChange={(e) => setCustomNiche(e.target.value)} placeholder="e.g. Sustainable bamboo kitchenware" />
             </div>
           )}
 
@@ -248,10 +230,9 @@ export default function Generator({ sessionId }) {
               {[
                 ["📐", "layout/theme.liquid"],
                 ["📄", "5 page templates"],
-                ["🧩", "4 Liquid sections"],
+                ["🧩", "2 Liquid sections"],
                 ["🎨", "Full CSS stylesheet"],
                 ["⚙️", "Theme Editor config"],
-                ["🌐", "Locale files"],
               ].map(([icon, label]) => (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#9CA3AF" }}>
                   <span>{icon}</span> {label}
@@ -268,10 +249,7 @@ export default function Generator({ sessionId }) {
               background: activeNiche ? "#00C896" : "#1a1a1a",
               color: activeNiche ? "#0A0A0A" : "#444",
               cursor: activeNiche ? "pointer" : "not-allowed",
-              width: "100%",
-              justifyContent: "center",
-              fontSize: 16,
-              padding: "16px",
+              width: "100%", justifyContent: "center", fontSize: 16, padding: "16px",
             }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
@@ -280,13 +258,11 @@ export default function Generator({ sessionId }) {
         </div>
       )}
 
-      {/* ── PHASE: GENERATING ── */}
       {phase === "generating" && (
         <CenteredBox>
           <div style={styles.spinRing}><Spinner size={36} /></div>
           <h2 style={styles.h2}>Building your <span style={{ color: "#00C896" }}>{activeNiche}</span> theme...</h2>
           <p style={{ ...styles.sub, marginBottom: "2rem" }}>Claude is writing all your theme files right now</p>
-
           <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: "2rem" }}>
             {GEN_STEPS.map((s, i) => (
               <div key={s} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
@@ -304,7 +280,6 @@ export default function Generator({ sessionId }) {
               </div>
             ))}
           </div>
-
           <div ref={logRef} style={styles.terminal}>
             <div style={{ color: "#00C896", marginBottom: 6, fontSize: 11, letterSpacing: 1 }}>● LIVE OUTPUT</div>
             {log.map((l, i) => (
@@ -314,12 +289,10 @@ export default function Generator({ sessionId }) {
             ))}
             <span style={{ color: "#444", animation: "blink 1s infinite" }}>▋</span>
           </div>
-
           <style>{`@keyframes blink{0%,100%{opacity:1}50%{opacity:0}} @keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </CenteredBox>
       )}
 
-      {/* ── PHASE: DONE ── */}
       {phase === "done" && result && (
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "3rem 2rem" }}>
           <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
@@ -329,7 +302,6 @@ export default function Generator({ sessionId }) {
               {result.meta?.tagline || `A custom ${activeNiche} Shopify theme, built just for you.`}
             </p>
           </div>
-
           <div style={{ background: "#111", border: "1px solid #222", borderRadius: 16, overflow: "hidden", marginBottom: "1.5rem" }}>
             <div style={{ background: result.meta?.colorAccent || "#00C896", padding: "1.25rem 1.75rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
@@ -351,19 +323,14 @@ export default function Generator({ sessionId }) {
               </div>
             </div>
           </div>
-
           <div style={{ display: "flex", gap: 12, marginBottom: "1.5rem", flexWrap: "wrap" }}>
             <button onClick={downloadZip} style={{ ...styles.btnPrimary, flex: 1, justifyContent: "center", fontSize: 15, padding: "14px" }}>
               <DownloadIcon /> Download Theme ZIP
             </button>
-            <button
-              onClick={() => { setPhase("configure"); setResult(null); setLog([]); }}
-              style={{ ...styles.btnGhost, flex: "0 0 auto", padding: "14px 20px" }}
-            >
+            <button onClick={() => { setPhase("configure"); setResult(null); setLog([]); }} style={{ ...styles.btnGhost, flex: "0 0 auto", padding: "14px 20px" }}>
               Generate Again
             </button>
           </div>
-
           <div style={styles.installBox}>
             <div style={styles.includesTitle}>How to install in Shopify</div>
             {[
@@ -381,14 +348,11 @@ export default function Generator({ sessionId }) {
         </div>
       )}
 
-      {/* ── PHASE: ERROR ── */}
       {phase === "error" && (
         <CenteredBox>
           <div style={{ fontSize: 48, marginBottom: "1rem" }}>⚠️</div>
           <h2 style={{ ...styles.h2, color: "#ef4444", marginBottom: "0.75rem" }}>Something went wrong</h2>
-          <p style={{ color: "#9CA3AF", fontSize: 14, marginBottom: "1.5rem", maxWidth: 420, textAlign: "center", lineHeight: 1.6 }}>
-            {error}
-          </p>
+          <p style={{ color: "#9CA3AF", fontSize: 14, marginBottom: "1.5rem", maxWidth: 420, textAlign: "center", lineHeight: 1.6 }}>{error}</p>
           {log.length > 0 && (
             <div style={{ ...styles.terminal, marginBottom: "1.5rem", width: "100%", maxWidth: 480 }}>
               {log.map((l, i) => (
@@ -397,9 +361,7 @@ export default function Generator({ sessionId }) {
             </div>
           )}
           <div style={{ display: "flex", gap: 10 }}>
-            {token && (
-              <button onClick={generate} style={styles.btnPrimary}>Try Again</button>
-            )}
+            {token && <button onClick={generate} style={styles.btnPrimary}>Try Again</button>}
             <button onClick={verifyPurchase} style={styles.btnGhost}>Re-verify Purchase</button>
           </div>
           <p style={{ marginTop: "1.5rem", fontSize: 12, color: "#444" }}>
