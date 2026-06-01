@@ -7,24 +7,28 @@ export default async function handler(req, res) {
   const { niche, storeName, tagline } = req.body;
   if (!niche) return res.status(400).json({ error: "Missing niche" });
 
-  const prompt = `Generate a Shopify theme for a ${niche} store called "${storeName || niche + " Store"}".
-${tagline ? `Tagline: ${tagline}` : ""}
+  const name = storeName || niche + " Store";
 
-Return ONLY a valid JSON object with exactly this structure, no markdown, no extra text:
+  const prompt = `Create a minimal Shopify theme for a ${niche} store called "${name}"${tagline ? ` with tagline "${tagline}"` : ""}.
+
+Return ONLY a JSON object, no markdown fences, no explanation. Keep each file concise but functional. Each file value must be a single line string with \\n for newlines:
+
 {
   "files": {
-    "layout/theme.liquid": "full liquid content here",
-    "templates/index.liquid": "full liquid content here",
-    "templates/product.liquid": "full liquid content here",
-    "assets/theme.css": "full css content here",
-    "config/settings_schema.json": "full json content here"
+    "layout/theme.liquid": "single line string",
+    "templates/index.liquid": "single line string",
+    "templates/product.liquid": "single line string",
+    "assets/theme.css": "single line string",
+    "config/settings_schema.json": "[]"
   },
   "meta": {
-    "themeName": "store theme name",
-    "tagline": "short tagline",
+    "themeName": "name here",
+    "tagline": "tagline here",
     "colorAccent": "#hexcode"
   }
-}`;
+}
+
+Make it niche-appropriate for ${niche}. Keep each file under 200 words.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -35,8 +39,8 @@ Return ONLY a valid JSON object with exactly this structure, no markdown, no ext
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-5",
-        max_tokens: 8000,
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 4000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
