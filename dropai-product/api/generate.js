@@ -7,6 +7,25 @@ export default async function handler(req, res) {
   const { niche, storeName, tagline } = req.body;
   if (!niche) return res.status(400).json({ error: "Missing niche" });
 
+  const prompt = `Generate a Shopify theme for a ${niche} store called "${storeName || niche + " Store"}".
+${tagline ? `Tagline: ${tagline}` : ""}
+
+Return ONLY a valid JSON object with exactly this structure, no markdown, no extra text:
+{
+  "files": {
+    "layout/theme.liquid": "full liquid content here",
+    "templates/index.liquid": "full liquid content here",
+    "templates/product.liquid": "full liquid content here",
+    "assets/theme.css": "full css content here",
+    "config/settings_schema.json": "full json content here"
+  },
+  "meta": {
+    "themeName": "store theme name",
+    "tagline": "short tagline",
+    "colorAccent": "#hexcode"
+  }
+}`;
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -18,7 +37,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: "claude-opus-4-5",
         max_tokens: 8000,
-        messages: [{ role: "user", content: `Generate a minimal Shopify theme JSON for a ${niche} store. Return only valid JSON with a "files" object and "meta" object.` }],
+        messages: [{ role: "user", content: prompt }],
       }),
     });
 
