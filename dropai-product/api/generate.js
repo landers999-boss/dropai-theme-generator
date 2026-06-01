@@ -2,40 +2,40 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  console.log("generate called, key exists:", !!process.env.ANTHROPIC_API_KEY);
-
   const { niche, storeName, tagline } = req.body;
   if (!niche) return res.status(400).json({ error: "Missing niche" });
 
   const name = storeName || niche + " Store";
+  const accent = getAccentColor(niche);
 
-  const prompt = `You are a Shopify theme developer. Create a production-ready Shopify theme for a ${niche} store called "${name}"${tagline ? ` with tagline "${tagline}"` : ""}.
+  const filesToGenerate = [
+    {
+      key: "layout/theme.liquid",
+      prompt: `Write layout/theme.liquid for a Shopify store called "${name}" (${niche}). Include <!DOCTYPE html>, <head> with {{ content_for_header }}, a sticky nav with logo and cart icon, and <main>{{ content_for_layout }}</main> and a footer. Use inline CSS for nav/footer styling. Niche color accent: ${accent}. Return ONLY the file content, no explanation.`
+    },
+    {
+      key: "templates/index.liquid",
+      prompt: `Write templates/index.liquid for a Shopify ${niche} store called "${name}"${tagline ? ` (tagline: ${tagline})` : ""}. Include a hero section with headline and CTA button, a featured products section using {% section 'featured-collection' %}, and a brief value props section. Return ONLY the file content.`
+    },
+    {
+      key: "templates/product.liquid",
+      prompt: `Write templates/product.liquid for a Shopify ${niche} store. Include product image, title, price (use {{ product.price | money }}), description, variant selector, and add-to-cart form. Use proper Shopify Liquid syntax. Return ONLY the file content.`
+    },
+    {
+      key: "templates/cart.liquid",
+      prompt: `Write templates/cart.liquid for a Shopify ${niche} store. Show cart items with title, quantity, price. Include a checkout button and subtotal. Use {{ cart.items }}, {{ cart.total_price | money }}. Return ONLY the file content.`
+    },
+    {
+      key: "assets/theme.css",
+      prompt: `Write a complete theme.css for a ${niche} Shopify store called "${name}". Include: CSS reset, variables with accent color ${accent}, typography, responsive nav, hero section, product grid, product page, cart page, buttons, footer. Mobile-first responsive. Return ONLY the CSS.`
+    },
+    {
+      key: "config/settings_schema.json",
+      prompt: `Write config/settings_schema.json for a Shopify theme. Include sections for "Colors" (accent color, background), "Typography" (font choices), and "Social media" (instagram, facebook url). Return ONLY valid JSON array.`
+    },
+  ];
 
-Return a JSON object with this exact structure. IMPORTANT: all file contents must use \\n for newlines (escaped), not real newlines. The entire response must be valid JSON that can be parsed with JSON.parse().
-
-{
-  "files": {
-    "layout/theme.liquid": "...",
-    "templates/index.liquid": "...",
-    "templates/product.liquid": "...",
-    "templates/collection.liquid": "...",
-    "templates/cart.liquid": "...",
-    "sections/header.liquid": "...",
-    "sections/hero.liquid": "...",
-    "assets/theme.css": "...",
-    "config/settings_schema.json": "...",
-    "locales/en.default.json": "..."
-  },
-  "meta": {
-    "themeName": "...",
-    "tagline": "...",
-    "colorAccent": "#hexcode"
-  }
-}
-
-Make it genuinely good — real Liquid syntax, proper Shopify objects (product.title, product.price | money, cart.item_count), niche-appropriate colors and copy for ${niche}, mobile-responsive CSS. Each file should be complete and functional. Remember: escape all newlines as \\n inside string values.`;
-
-  try {
+  async function callClaude(prompt) {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -44,77 +44,72 @@ Make it genuinely good — real Liquid syntax, proper Shopify objects (product.t
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
-        max_tokens: 16000,
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 3000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
-
     if (!response.ok) {
-      const errText = await response.text();
-      console.error("Anthropic error:", errText);
-      return res.status(500).json({ error: "Anthropic error: " + errText });
+      const err = await response.text();
+      throw new Error("Anthropic error: " + err);
     }
-
     const data = await response.json();
-    const aiText = data.content?.[0]?.text || "";
+    return data.content?.[0]?.text || "";
+  }
 
-    // Strip markdown fences if present
-    const clean = aiText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-
-    // Fix unescaped newlines inside JSON strings
-    // Replace real newlines that appear inside string values with \n
-    let fixed = "";
-    let inString = false;
-    let escaped = false;
-    for (let i = 0; i < clean.length; i++) {
-      const ch = clean[i];
-      if (escaped) {
-        fixed += ch;
-        escaped = false;
-        continue;
-      }
-      if (ch === "\\") {
-        fixed += ch;
-        escaped = true;
-        continue;
-      }
-      if (ch === '"') {
-        inString = !inString;
-        fixed += ch;
-        continue;
-      }
-      if (inString && ch === "\n") {
-        fixed += "\\n";
-        continue;
-      }
-      if (inString && ch === "\r") {
-        continue; // strip carriage returns
-      }
-      if (inString && ch === "\t") {
-        fixed += "\\t";
-        continue;
-      }
-      fixed += ch;
-    }
-
-    let parsed;
-    try {
-      parsed = JSON.parse(fixed);
-    } catch (e) {
-      console.error("JSON parse error:", e.message);
-      console.error("Raw AI text (first 500):", clean.substring(0, 500));
-      return res.status(500).json({ error: "AI returned invalid JSON: " + e.message });
+  try {
+    const files = {};
+    for (const file of filesToGenerate) {
+      const content = await callClaude(file.prompt);
+      // Strip any markdown fences
+      files[file.key] = content.replace(/^```[\w]*\n?/i, "").replace(/\n?```$/i, "").trim();
     }
 
     return res.status(200).json({
       success: true,
-      files: parsed.files || {},
-      meta: parsed.meta || {},
+      files,
+      meta: {
+        themeName: name + " Theme",
+        tagline: tagline || getTagline(niche),
+        colorAccent: accent,
+      },
     });
-
   } catch (err) {
     console.error("Caught error:", err.message);
     return res.status(500).json({ error: err.message });
   }
+}
+
+function getAccentColor(niche) {
+  const map = {
+    "Pet Supplies": "#F97316",
+    "Fitness & Gym": "#EF4444",
+    "Beauty & Skincare": "#EC4899",
+    "Home Decor": "#8B5CF6",
+    "Tech & Gadgets": "#3B82F6",
+    "Fashion & Apparel": "#F59E0B",
+    "Food & Gourmet": "#10B981",
+    "Kids & Baby": "#FBBF24",
+    "Sports & Outdoors": "#06B6D4",
+    "Jewelry & Accessories": "#D97706",
+    "Health & Wellness": "#22C55E",
+  };
+  return map[niche] || "#00C896";
+}
+
+function getTagline(niche) {
+  const map = {
+    "Pet Supplies": "Everything your pet deserves",
+    "Fitness & Gym": "Train harder. Live better.",
+    "Beauty & Skincare": "Glow from within",
+    "Home Decor": "Make every room a statement",
+    "Tech & Gadgets": "The future, delivered",
+    "Fashion & Apparel": "Style that speaks",
+    "Food & Gourmet": "Taste the difference",
+    "Kids & Baby": "Safe, fun, and loved",
+    "Sports & Outdoors": "Adventure awaits",
+    "Jewelry & Accessories": "Wear your story",
+    "Health & Wellness": "Feel your best every day",
+  };
+  return map[niche] || "Quality you can trust";
 }
