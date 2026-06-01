@@ -6,6 +6,8 @@ export default async function handler(req, res) {
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+  const { niche, storeName } = req.body;
+
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -17,13 +19,14 @@ export default async function handler(req, res) {
               name: "DropAI Shopify Theme Generator",
               description: "AI-generated custom Shopify theme for your dropshipping store",
             },
-            unit_amount: 2700, // $27.00 — change this to your price in cents
+            unit_amount: 4700, // $47.00
           },
           quantity: 1,
         },
       ],
       mode: "payment",
-      success_url: `${req.headers.origin}/generator?session_id={CHECKOUT_SESSION_ID}`,
+      metadata: { niche: niche || "", storeName: storeName || "" },
+      success_url: `${req.headers.origin}/generate?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${req.headers.origin}/`,
     });
 
