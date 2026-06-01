@@ -9,26 +9,33 @@ export default async function handler(req, res) {
 
   const name = storeName || niche + " Store";
 
-  const prompt = `Create a minimal Shopify theme for a ${niche} store called "${name}"${tagline ? ` with tagline "${tagline}"` : ""}.
+  const prompt = `You are a Shopify theme developer. Create a high-quality, production-ready Shopify theme for a ${niche} store called "${name}"${tagline ? ` with tagline "${tagline}"` : ""}.
 
-Return ONLY a JSON object, no markdown fences, no explanation. Keep each file concise but functional. Each file value must be a single line string with \\n for newlines:
+CRITICAL: Return ONLY a raw JSON object. No markdown, no backticks, no explanation before or after. The response must start with { and end with }.
+
+All file content must be on a single line — use \\n for line breaks, \\" for quotes inside strings. Do not use actual newlines inside JSON string values.
 
 {
   "files": {
-    "layout/theme.liquid": "single line string",
-    "templates/index.liquid": "single line string",
-    "templates/product.liquid": "single line string",
-    "assets/theme.css": "single line string",
-    "config/settings_schema.json": "[]"
+    "layout/theme.liquid": "full HTML layout with {{ content_for_header }}, {{ content_for_layout }}, nav, footer",
+    "templates/index.liquid": "homepage with hero, featured products, value props",
+    "templates/product.liquid": "product page with image, title, price, add to cart",
+    "templates/collection.liquid": "collection grid with product cards",
+    "templates/cart.liquid": "cart page with line items and checkout button",
+    "sections/header.liquid": "sticky nav with logo, menu, cart icon + {% schema %}",
+    "sections/hero.liquid": "hero banner with headline, subtext, CTA button + {% schema %}",
+    "assets/theme.css": "complete CSS: reset, typography, layout, components, responsive",
+    "config/settings_schema.json": "theme editor settings array with typography and color sections",
+    "locales/en.default.json": "strings object with general, products, cart keys"
   },
   "meta": {
-    "themeName": "name here",
-    "tagline": "tagline here",
-    "colorAccent": "#hexcode"
+    "themeName": "${name} Theme",
+    "tagline": "compelling tagline for ${niche}",
+    "colorAccent": "#hexcode matching ${niche} aesthetic"
   }
 }
 
-Make it niche-appropriate for ${niche}. Keep each file under 200 words.`;
+Make it genuinely good — real Liquid syntax, proper Shopify objects (product.title, product.price | money, cart.item_count), niche-appropriate colors and copy, mobile-responsive CSS. Each file should be complete and functional.`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -39,8 +46,8 @@ Make it niche-appropriate for ${niche}. Keep each file under 200 words.`;
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 4000,
+        model: "claude-opus-4-6",
+        max_tokens: 16000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
