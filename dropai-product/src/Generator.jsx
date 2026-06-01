@@ -58,11 +58,12 @@ export default function Generator({ sessionId }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      if (!text) throw new Error("Empty response from server");
+      const data = JSON.parse(text);
       if (!res.ok) throw new Error(data.error || "Verification failed");
       setToken(data.token);
       setCustomerEmail(data.customerEmail || "");
-      // Pre-fill from Stripe metadata if present
       if (data.metadata?.niche) {
         const match = NICHES.find((n) => n.label === data.metadata.niche);
         if (match) setSelectedNiche(match.id);
@@ -108,10 +109,20 @@ export default function Generator({ sessionId }) {
         body: JSON.stringify({ niche: activeNiche, storeName, tagline }),
       });
 
-      const data = await res.json();
+      // ✅ Safe parse — handles empty or non-JSON responses
+      const text = await res.text();
+      if (!text) throw new Error("Empty response from server");
+      const data = JSON.parse(text);
       if (!res.ok) throw new Error(data.error || "Generation failed");
 
-      addLog(`✅ Theme generated — ${Object.keys(data.files).length} files`);
+      // ✅ Parse AI content into files/meta
+      const aiText = data.content?.[0]?.text || "";
+      const clean = aiText.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      const files = parsed.files || {};
+      const meta = parsed.meta || {};
+
+      addLog(`✅ Theme generated — ${Object.keys(files).length} files`);
       setGenStep(3);
 
       addLog("📦 Building ZIP archive...");
@@ -119,14 +130,14 @@ export default function Generator({ sessionId }) {
       const folderName =
         (storeName || activeNiche).toLowerCase().replace(/\s+/g, "-") + "-theme";
       const folder = zip.folder(folderName);
-      for (const [path, content] of Object.entries(data.files)) {
+      for (const [path, content] of Object.entries(files)) {
         folder.file(path, content);
       }
       const blob = await zip.generateAsync({ type: "blob" });
       setGenStep(4);
       addLog("✅ ZIP ready for download!");
 
-      setResult({ blob, meta: data.meta, files: data.files });
+      setResult({ blob, meta, files });
       setPhase("done");
     } catch (e) {
       setError(e.message);
@@ -178,14 +189,12 @@ export default function Generator({ sessionId }) {
       {/* ── PHASE: CONFIGURE ── */}
       {phase === "configure" && (
         <div style={{ maxWidth: 780, margin: "0 auto", padding: "3rem 2rem" }}>
-          {/* Header */}
           <div style={{ marginBottom: "2.5rem" }}>
             <div style={styles.badge}>✓ Purchase verified — let's build your theme</div>
             <h1 style={styles.h1}>Configure your theme</h1>
             <p style={styles.sub}>You can generate as many times as you want. Each run is unique.</p>
           </div>
 
-          {/* Niche grid */}
           <div style={{ marginBottom: "1.5rem" }}>
             <Label>Choose your niche</Label>
             <div style={styles.nicheGrid}>
@@ -222,7 +231,6 @@ export default function Generator({ sessionId }) {
             </div>
           )}
 
-          {/* Store details */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: "2rem" }}>
             <div>
               <Label>Store name <Opt /></Label>
@@ -234,7 +242,6 @@ export default function Generator({ sessionId }) {
             </div>
           </div>
 
-          {/* What you'll get */}
           <div style={styles.includesBox}>
             <div style={styles.includesTitle}>What gets generated</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
@@ -280,7 +287,6 @@ export default function Generator({ sessionId }) {
           <h2 style={styles.h2}>Building your <span style={{ color: "#00C896" }}>{activeNiche}</span> theme...</h2>
           <p style={{ ...styles.sub, marginBottom: "2rem" }}>Claude is writing all your theme files right now</p>
 
-          {/* Step track */}
           <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: "2rem" }}>
             {GEN_STEPS.map((s, i) => (
               <div key={s} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
@@ -299,7 +305,6 @@ export default function Generator({ sessionId }) {
             ))}
           </div>
 
-          {/* Terminal log */}
           <div ref={logRef} style={styles.terminal}>
             <div style={{ color: "#00C896", marginBottom: 6, fontSize: 11, letterSpacing: 1 }}>● LIVE OUTPUT</div>
             {log.map((l, i) => (
@@ -317,7 +322,6 @@ export default function Generator({ sessionId }) {
       {/* ── PHASE: DONE ── */}
       {phase === "done" && result && (
         <div style={{ maxWidth: 720, margin: "0 auto", padding: "3rem 2rem" }}>
-          {/* Success header */}
           <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
             <div style={styles.successIcon}>✅</div>
             <h2 style={{ ...styles.h1, textAlign: "center", marginBottom: "0.5rem" }}>Your theme is ready!</h2>
@@ -326,7 +330,6 @@ export default function Generator({ sessionId }) {
             </p>
           </div>
 
-          {/* Theme card */}
           <div style={{ background: "#111", border: "1px solid #222", borderRadius: 16, overflow: "hidden", marginBottom: "1.5rem" }}>
             <div style={{ background: result.meta?.colorAccent || "#00C896", padding: "1.25rem 1.75rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
@@ -349,7 +352,6 @@ export default function Generator({ sessionId }) {
             </div>
           </div>
 
-          {/* Actions */}
           <div style={{ display: "flex", gap: 12, marginBottom: "1.5rem", flexWrap: "wrap" }}>
             <button onClick={downloadZip} style={{ ...styles.btnPrimary, flex: 1, justifyContent: "center", fontSize: 15, padding: "14px" }}>
               <DownloadIcon /> Download Theme ZIP
@@ -362,7 +364,6 @@ export default function Generator({ sessionId }) {
             </button>
           </div>
 
-          {/* Install steps */}
           <div style={styles.installBox}>
             <div style={styles.includesTitle}>How to install in Shopify</div>
             {[
@@ -410,7 +411,6 @@ export default function Generator({ sessionId }) {
   );
 }
 
-// ── Small components ─────────────────────────────────────────────────────
 function CenteredBox({ children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 56px)", padding: "3rem 2rem", textAlign: "center" }}>
@@ -463,7 +463,6 @@ function DownloadIcon() {
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────
 const styles = {
   root: { fontFamily: "'DM Sans','Inter',sans-serif", minHeight: "100vh", background: "#0A0A0A", color: "#fff" },
   nav: { background: "#0A0A0A", borderBottom: "1px solid #1a1a1a", padding: "0 2rem", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100 },
