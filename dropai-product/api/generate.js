@@ -7,31 +7,67 @@ export default async function handler(req, res) {
 
   const name = storeName || niche + " Store";
   const accent = getAccentColor(niche);
+  const taglineText = tagline || getTagline(niche);
 
   const filesToGenerate = [
     {
       key: "layout/theme.liquid",
-      prompt: `Write layout/theme.liquid for a Shopify store called "${name}" (${niche}). Include <!DOCTYPE html>, <head> with {{ content_for_header }}, a sticky nav with logo and cart icon, and <main>{{ content_for_layout }}</main> and a footer. Use inline CSS for nav/footer styling. Niche color accent: ${accent}. Return ONLY the file content, no explanation.`
+      prompt: `Write layout/theme.liquid for a Shopify store called "${name}" (${niche} niche).
+Include:
+- <!DOCTYPE html><html><head> with {{ content_for_header }}, meta charset, viewport, and a <style> block with full CSS (reset, nav, footer, buttons, product grid, hero, responsive)
+- Use accent color ${accent}
+- A sticky <nav> with the store name "${name}" on the left and a cart icon showing {{ cart.item_count }} on the right, linking to /cart
+- <main>{{ content_for_layout }}</main>
+- A <footer> with store name and copyright
+Return ONLY the file content, no explanation.`
     },
     {
       key: "templates/index.liquid",
-      prompt: `Write templates/index.liquid for a Shopify ${niche} store called "${name}"${tagline ? ` (tagline: ${tagline})` : ""}. Include a hero section with headline and CTA button, a featured products section using {% section 'featured-collection' %}, and a brief value props section. Return ONLY the file content.`
+      prompt: `Write templates/index.liquid for a Shopify ${niche} store called "${name}" (tagline: "${taglineText}").
+Do NOT use any {% section %} tags. Write all HTML inline.
+Include:
+- A hero div with a big headline, the tagline, and a "Shop Now" <a href="/collections/all"> button
+- A "Featured Products" heading followed by {{ collections.all.products | limit: 4 }} in a product grid, each showing product image, title, and price
+- A 3-column "Why Us" section with relevant ${niche} selling points
+Use only standard HTML and Liquid. No {% section %} tags. Return ONLY the file content.`
     },
     {
       key: "templates/product.liquid",
-      prompt: `Write templates/product.liquid for a Shopify ${niche} store. Include product image, title, price (use {{ product.price | money }}), description, variant selector, and add-to-cart form. Use proper Shopify Liquid syntax. Return ONLY the file content.`
+      prompt: `Write templates/product.liquid for a Shopify ${niche} store.
+Include:
+- Product image: {{ product.featured_image | img_url: '600x600' }}
+- Product title: {{ product.title }}
+- Price: {{ product.price | money }}
+- Description: {{ product.description }}
+- Add to cart form with {% form 'product', product %} and a submit button
+- Variant selector if product has multiple variants
+Use only standard Shopify Liquid. Return ONLY the file content.`
+    },
+    {
+      key: "templates/collection.liquid",
+      prompt: `Write templates/collection.liquid for a Shopify ${niche} store.
+Include:
+- Collection title: {{ collection.title }}
+- Product grid using {% for product in collection.products %}
+- Each product card: image, title, price, link to product page
+Use standard Shopify Liquid. Return ONLY the file content.`
     },
     {
       key: "templates/cart.liquid",
-      prompt: `Write templates/cart.liquid for a Shopify ${niche} store. Show cart items with title, quantity, price. Include a checkout button and subtotal. Use {{ cart.items }}, {{ cart.total_price | money }}. Return ONLY the file content.`
-    },
-    {
-      key: "assets/theme.css",
-      prompt: `Write a complete theme.css for a ${niche} Shopify store called "${name}". Include: CSS reset, variables with accent color ${accent}, typography, responsive nav, hero section, product grid, product page, cart page, buttons, footer. Mobile-first responsive. Return ONLY the CSS.`
+      prompt: `Write templates/cart.liquid for a Shopify ${niche} store.
+Include:
+- {% form 'cart' %} wrapping the cart
+- {% for item in cart.items %}: show item image, title, quantity input, line price
+- Subtotal: {{ cart.total_price | money }}
+- Checkout button
+- "Continue Shopping" link to /collections/all
+Return ONLY the file content.`
     },
     {
       key: "config/settings_schema.json",
-      prompt: `Write config/settings_schema.json for a Shopify theme. Include sections for "Colors" (accent color, background), "Typography" (font choices), and "Social media" (instagram, facebook url). Return ONLY valid JSON array.`
+      prompt: `Write a valid Shopify config/settings_schema.json.
+Include two sections: one for "Colors" with a color picker for accent color (default "${accent}"), one for "Typography" with a font-family select.
+Return ONLY a valid JSON array. No extra text.`
     },
   ];
 
@@ -61,7 +97,6 @@ export default async function handler(req, res) {
     const files = {};
     for (const file of filesToGenerate) {
       const content = await callClaude(file.prompt);
-      // Strip any markdown fences
       files[file.key] = content.replace(/^```[\w]*\n?/i, "").replace(/\n?```$/i, "").trim();
     }
 
@@ -70,7 +105,7 @@ export default async function handler(req, res) {
       files,
       meta: {
         themeName: name + " Theme",
-        tagline: tagline || getTagline(niche),
+        tagline: taglineText,
         colorAccent: accent,
       },
     });
